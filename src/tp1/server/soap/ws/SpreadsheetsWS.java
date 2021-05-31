@@ -46,7 +46,7 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
     public final static int CONNECTION_TIMEOUT = 10000;
     public final static int REPLY_TIMEOUT = 600;
     public static final String SPREADSHEETS_WSDL = "/spreadsheets/?wsdl";
-    public final static String passwordServers= "serversidepsswd";
+    //public final static String passwordServers= "serversidepsswd";
     private int counter = 0;
     private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
     Discovery discovery;
@@ -56,12 +56,12 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
     private static Logger Log = Logger.getLogger(SpreadsheetsWS.class.getName());
     private Client client;
     private Map<String, Set<String>> usersSpreadsheets = new HashMap<>();
-
+    public String passwordServers;
     public SpreadsheetsWS() {
 
     }
 
-    public SpreadsheetsWS(String domain, String serverURI, Discovery discover) {
+    public SpreadsheetsWS(String domain, String password, String serverURI, Discovery discover) {
         this.domain = domain;
         this.serverURI = serverURI;
         this.discovery = discover;
@@ -69,6 +69,7 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
         config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
         config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
         client = ClientBuilder.newClient(config);
+        passwordServers = password;
     }
 
     @Override
@@ -475,7 +476,7 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
             while (retries < MAX_RETRIES) {
                 try {
                     String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    Response r = target.queryParam("range", range).queryParam("userId", userAux).request()
+                    Response r = target.queryParam("range", range).queryParam("userId", userAux).queryParam("password", passwordServers).request()
                             .accept(MediaType.APPLICATION_JSON).get();
                     String[][] val = r.readEntity(String[][].class);
                     putValuesInCache(sheetURL, range, val);

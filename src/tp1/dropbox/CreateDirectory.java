@@ -17,9 +17,6 @@ import tp1.dropbox.arguments.CreateFolderV2Args;
 
 public class CreateDirectory {
 
-	private static final String apiKey = "INSERT YOURS";
-	private static final String apiSecret = "INSERT YOURS";
-	private static final String accessTokenStr = "INSERT YOURS";
 
 	protected static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 	
@@ -27,13 +24,17 @@ public class CreateDirectory {
 	
 	private OAuth20Service service;
 	private OAuth2AccessToken accessToken;
-	
+	private String apiKey;
+	private String apiSecret;
+	private String accessTokenStr;	
 	private Gson json;
 	
-	public CreateDirectory() {
+	public CreateDirectory(String apiKey, String apiSecret, String acessTokenStr) {
+		this.apiKey=apiKey;
+        this.apiSecret=apiSecret;
+        this.accessTokenStr=acessTokenStr;
 		service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
 		accessToken = new OAuth2AccessToken(accessTokenStr);
-		
 		json = new Gson();
 	}
 	
@@ -67,22 +68,4 @@ public class CreateDirectory {
 		}
 		
 	}
-	
-	public static void main(String[] args) {
-		Scanner sc = new Scanner(System.in);
-		
-		CreateDirectory cd = new CreateDirectory();
-		
-		System.out.println("Provide the name of the directory to be created:");
-		String directory = sc.nextLine().trim();
-		
-		sc.close();
-		
-		boolean success = cd.execute(directory);
-		if(success)
-			System.out.println("Directory '" + directory + "' created successfuly.");
-		else
-			System.out.println("Failed to create directory '" + directory + "'");
-	}
-
 }

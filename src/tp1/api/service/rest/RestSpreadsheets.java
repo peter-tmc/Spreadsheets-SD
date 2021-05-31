@@ -161,7 +161,7 @@ public interface RestSpreadsheets {
 	@Path("/{sheetId}/range")
 	@Produces(MediaType.APPLICATION_JSON)
 	String[][] getSpreadsheetValuesRange(@PathParam("sheetId") String sheetId, 
-				@QueryParam("range") String range, @QueryParam("userId") String userId);
+				@QueryParam("range") String range, @QueryParam("userId") String userId, @QueryParam("password") String password);
 
 	/**
 	 * Deletes the spreadsheets of the specified user

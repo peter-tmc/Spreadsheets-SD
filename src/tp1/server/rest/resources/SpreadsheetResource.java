@@ -1,21 +1,31 @@
 package tp1.server.rest.resources;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.security.GeneralSecurityException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.xml.namespace.QName;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.services.sheets.v4.Sheets;
+import com.google.api.services.sheets.v4.model.ValueRange;
+import com.sun.xml.ws.client.BindingProviderProperties;
+
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
 
-import jakarta.xml.ws.BindingProvider;
-import com.sun.xml.ws.client.BindingProviderProperties;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Client;
@@ -24,9 +34,11 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
+import jakarta.xml.ws.BindingProvider;
 import jakarta.xml.ws.Service;
 import jakarta.xml.ws.WebServiceException;
 import tp1.Discovery;
+import tp1.api.GoogleSheetsReturn;
 import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
 import tp1.api.service.rest.RestSpreadsheets;
@@ -46,7 +58,8 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	public final static int RETRY_PERIOD = 1000;
 	public final static int CONNECTION_TIMEOUT = 10000;
 	public final static int REPLY_TIMEOUT = 600;
-	public final static String passwordServers= "serversidepsswd";
+	private static final String GOOGLE_SHEETS = "sheets.googleapis.com";
+	private static final String HTTPS_GOOGLE_SHEET = "https://sheets.googleapis.com/";
 	private int counter = 0;
 	private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
 	private static Logger Log = Logger.getLogger(SpreadsheetResource.class.getName());
@@ -56,11 +69,13 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	private Map<String, Map<String, String[][]>> sheetsValuesCache = new HashMap<>();
 	private Client client;
 	private Map<String, Set<String>> usersSpreadsheets = new HashMap<>();
+	public String passwordServers;
+	private String googleKey = "AIzaSyCcdXajR6S0xAaMgyPBA-Js_MWFrQFqB8A";
 
 	public SpreadsheetResource() {
 	}
 
-	public SpreadsheetResource(String domain, String serverURI, Discovery discover) {
+	public SpreadsheetResource(String domain, String serverSecret, String serverURI, Discovery discover) {
 		this.domain = domain;
 		this.serverURI = serverURI;
 		this.discovery = discover;
@@ -68,6 +83,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		client = ClientBuilder.newClient(config);
+		passwordServers = serverSecret;
 	}
 
 	@Override
@@ -215,7 +231,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				try {
 					return sheet.getCellRawValue(row, col);
 				} catch (IndexOutOfBoundsException e) {
-					return "#ERROR?";
+					return "#ERR?";
 				}
 			}
 
@@ -446,7 +462,10 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId) {
+	public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId, String password) {
+		if (!password.equals(passwordServers)) {
+			throw new WebApplicationException(Status.FORBIDDEN);
+		}
 		String[][] values;
 		if (userId == null || sheetId == null) {
 			throw new WebApplicationException(Status.BAD_REQUEST);
@@ -497,7 +516,6 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				try {
 					val = getRangeValuesRequest(sheetURL, range, sheet);
 				} catch (SheetsException e) {
-
 					e.printStackTrace();
 					return null;
 				}
@@ -541,11 +559,17 @@ public class SpreadsheetResource implements RestSpreadsheets {
 			while (retries < MAX_RETRIES) {
 				try {
 					String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-					Response r = target.queryParam("range", range).queryParam("userId", userAux).request()
-							.accept(MediaType.APPLICATION_JSON).get();
-					String[][] val = r.readEntity(String[][].class);
-					putValuesInCache(sheetURL, range, val);
-					return val;
+					Response r = target.queryParam("range", range).queryParam("userId", userAux)
+							.queryParam("password", passwordServers).request().accept(MediaType.APPLICATION_JSON).get();
+					if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
+						String[][] val = r.readEntity(String[][].class);
+						putValuesInCache(sheetURL, range, val);
+						//Log.severe(val.toString());
+						return val;
+					} else {
+						System.err.println(r.getStatus());
+						throw new WebApplicationException(r.getStatus());
+					}
 				} catch (ProcessingException pe) {
 					System.out.println("Timeout occurred");
 					pe.printStackTrace();
@@ -559,61 +583,120 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				}
 			}
 		} else {
-
-			SoapSpreadsheets spsheets = null;
-			short retries = 0;
-			boolean success = false;
-			String[] str = sheetURL.split("/spreadsheets/");
-			while (!success && retries < MAX_RETRIES) {
-				try {
-					QName QNAME = new QName(SoapSpreadsheets.NAMESPACE, SoapSpreadsheets.NAME);
-					Service service = Service.create(new URL(str[0] + SpreadsheetsWS.SPREADSHEETS_WSDL), QNAME);
-					spsheets = service.getPort(tp1.api.service.soap.SoapSpreadsheets.class);
-					success = true;
-				} catch (WebServiceException e) {
-					System.err.println("Could not contact the server: " + e.getMessage());
-					retries++;
-					Log.severe(e.toString());
+			if (sheetURL.contains("soap")) {
+				SoapSpreadsheets spsheets = null;
+				short retries = 0;
+				boolean success = false;
+				String[] str = sheetURL.split("/spreadsheets/");
+				while (!success && retries < MAX_RETRIES) {
 					try {
-						Thread.sleep(RETRY_PERIOD);
-					} catch (InterruptedException e2) {
-						// nothing to be done here, if this happens we will just retry sooner.
+						QName QNAME = new QName(SoapSpreadsheets.NAMESPACE, SoapSpreadsheets.NAME);
+						Service service = Service.create(new URL(str[0] + SpreadsheetsWS.SPREADSHEETS_WSDL), QNAME);
+						spsheets = service.getPort(tp1.api.service.soap.SoapSpreadsheets.class);
+						success = true;
+					} catch (WebServiceException e) {
+						System.err.println("Could not contact the server: " + e.getMessage());
+						retries++;
+						Log.severe(e.toString());
+						try {
+							Thread.sleep(RETRY_PERIOD);
+						} catch (InterruptedException e2) {
+							// nothing to be done here, if this happens we will just retry sooner.
+						}
+					} catch (MalformedURLException e4) {
+						System.err.println("malformed URL");
+						Log.severe(e4.toString());
 					}
-				} catch (MalformedURLException e4) {
-					System.err.println("malformed URL");
-					Log.severe(e4.toString());
+				}
+				// Set timeouts for executing operations
+				((BindingProvider) spsheets).getRequestContext().put(BindingProviderProperties.CONNECT_TIMEOUT,
+						CONNECTION_TIMEOUT);
+				((BindingProvider) spsheets).getRequestContext().put(BindingProviderProperties.REQUEST_TIMEOUT,
+						REPLY_TIMEOUT);
+
+				retries = 0;
+				while (retries < MAX_RETRIES) {
+
+					try {
+						String userAux = String.format("%s@%s", sheet.getOwner(), domain);
+						String[][] values = spsheets.getSpreadsheetValuesRange(str[1], range, userAux);
+						putValuesInCache(sheetURL, range, values);
+						return values;
+					} catch (SheetsException e) {
+						System.out.println("Cound not get spreadsheet: " + e.getMessage());
+						throw e;
+					} catch (WebServiceException wse) {
+						System.out.println("Communication error.");
+						wse.printStackTrace();
+						retries++;
+						try {
+							Thread.sleep(RETRY_PERIOD);
+						} catch (InterruptedException e) {
+							// nothing to be done here, if this happens we will just retry sooner.
+						}
+						System.out.println("Retrying to execute request.");
+					}
+				}
+
+			} else {
+				if (sheetURL.contains(GOOGLE_SHEETS)) {
+					String sheetId = sheetURL.split(HTTPS_GOOGLE_SHEET)[1];
+					WebTarget target = client.target(HTTPS_GOOGLE_SHEET).path("v4/spreadsheets");
+
+					short retries = 0;
+					while (retries < MAX_RETRIES) {
+						try {
+							Response r = target.path(sheetId).path("values").path(range).queryParam("key", googleKey)
+									.request().accept(MediaType.APPLICATION_JSON).get();
+							if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
+								String[][] val = r.readEntity(GoogleSheetsReturn.class).getValues();
+								putValuesInCache(sheetURL, range, val);
+								//Log.severe(val.toString());
+								return val;
+							} else {
+								System.err.println(r.getStatus());
+								throw new WebApplicationException(r.getStatus());
+							}
+						} catch (ProcessingException pe) {
+							System.out.println("Timeout occurred");
+							pe.printStackTrace();
+							retries++;
+							try {
+								Thread.sleep(RETRY_PERIOD);
+							} catch (InterruptedException e) {
+
+							}
+							System.out.println("Retrying to execute request.");
+						}
+					}
+
+					/*try {
+						HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+						com.google.api.client.json.JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+						GoogleCredential credential = null;
+						Sheets sheetsService = new Sheets.Builder(httpTransport, jsonFactory, credential)
+								.setApplicationName("Google-SheetsSample/0.1").build();
+						Sheets.Spreadsheets.Values.Get request;
+						request = sheetsService.spreadsheets().values().get(sheetId, range);
+						
+						List<List<Object>> valuesList = response.getValues();
+						String[][] values = new String[valuesList.size()][valuesList.get(0).size()];
+						for (int i = 0; i < valuesList.size(); i++) {
+							List<Object> row = valuesList.get(i);
+						
+							for (int j = 0; j < row.size(); j++)
+								values[i][j] = (String) row.get(j);
+						}
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (GeneralSecurityException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					*/
 				}
 			}
-			// Set timeouts for executing operations
-			((BindingProvider) spsheets).getRequestContext().put(BindingProviderProperties.CONNECT_TIMEOUT,
-					CONNECTION_TIMEOUT);
-			((BindingProvider) spsheets).getRequestContext().put(BindingProviderProperties.REQUEST_TIMEOUT,
-					REPLY_TIMEOUT);
-
-			retries = 0;
-			while (retries < MAX_RETRIES) {
-
-				try {
-					String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-					String[][] values = spsheets.getSpreadsheetValuesRange(str[1], range, userAux);
-					putValuesInCache(sheetURL, range, values);
-					return values;
-				} catch (SheetsException e) {
-					System.out.println("Cound not get spreadsheet: " + e.getMessage());
-					throw e;
-				} catch (WebServiceException wse) {
-					System.out.println("Communication error.");
-					wse.printStackTrace();
-					retries++;
-					try {
-						Thread.sleep(RETRY_PERIOD);
-					} catch (InterruptedException e) {
-						// nothing to be done here, if this happens we will just retry sooner.
-					}
-					System.out.println("Retrying to execute request.");
-				}
-			}
-
 		}
 		return getValuesInCache(sheetURL, range);
 	}

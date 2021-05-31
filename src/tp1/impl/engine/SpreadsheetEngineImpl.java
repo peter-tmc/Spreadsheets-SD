@@ -15,24 +15,20 @@ import tp1.util.CellRange;
 
 /**
 Example of use:
-
 Spreadsheet sheet = ...
 String[][] values = SpreadsheetEngineImpl.getInstance().computeSpreadsheetValues(new AbstractSpreadsheet() {
 	@Override
 	public int rows() {
 		return sheet.getRows();
 	}
-
 	@Override
 	public int columns() {
 		return sheet.getColumns();
 	}
-
 	@Override
 	public String sheetId() {
 		return sheet.getSheetId();
 	}
-
 	@Override
 	public String cellRawValue(int row, int col) {
 		try {
@@ -41,7 +37,6 @@ String[][] values = SpreadsheetEngineImpl.getInstance().computeSpreadsheetValues
 			return "#ERROR?";
 		}
 	}
-
 	@Override
 	public String[][] getRangeValues(String sheetURL, String range) {
 		// get remote range values

@@ -46,7 +46,7 @@ public class SpreadsheetsServerOAuth {
                     service.getPort(SoapUsers.class);
                 }
             }
-            config.register(new SpreadsheetResourceOAuth(args[0], Boolean.parseBoolean(args[1]), serverURI, discover));
+            config.register(new SpreadsheetResourceOAuth(args[0], Boolean.parseBoolean(args[1]), args[2], args[3], args[4], args[5], serverURI, discover));
             JdkHttpServerFactory.createHttpServer(URI.create(serverURI), config, SSLContext.getDefault());
 
             Log.info(String.format("%s Server ready @ %s\n", SERVICE, serverURI));

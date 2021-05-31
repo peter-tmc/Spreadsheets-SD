@@ -13,22 +13,23 @@ import com.github.scribejava.core.model.Verb;
 import com.github.scribejava.core.oauth.OAuth20Service;
 import com.google.gson.Gson;
 
-public class UploadDropbox {
-    private static final String apiKey = "yszklpvd11evujy";
-	private static final String apiSecret = "putbwd4j4rklmq9";
-	private static final String accessTokenStr = "Qj1kumo2dUQAAAAAAAAAAeTMezCIsloWxyc4MzdumyLCQVD7j8ZWXnSDIc3tVLd8";	
+public class UploadDropbox {	
 	private static final String UPLOAD_V2_URL = "https://content.dropboxapi.com/2/files/upload";
     protected static final String CONTENT_TYPE = "application/octet-stream";
 		
 	private OAuth20Service service;
 	private OAuth2AccessToken accessToken;
-	
+	private String apiKey;
+	private String apiSecret;
+	private String accessTokenStr;
 	private Gson json;
 
-    public UploadDropbox(){
-        service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
+    public UploadDropbox(String apiKey, String apiSecret, String acessTokenStr){
+        this.apiKey=apiKey;
+        this.apiSecret=apiSecret;
+        this.accessTokenStr=acessTokenStr;
+		service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
 		accessToken = new OAuth2AccessToken(accessTokenStr);
-		
 		json = new Gson();
     }
 

@@ -50,7 +50,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     public final static int RETRY_PERIOD = 1000;
     public final static int CONNECTION_TIMEOUT = 10000;
     public final static int REPLY_TIMEOUT = 600;
-    public final static String passwordServers = "serversidepsswd";
+    
     private static final String OVERWRITE = "overwrite";
     private int counter = 0;
     //private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
@@ -66,11 +66,12 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     private Download download;
     private UploadDropbox uploadDropbox;
     private Gson json;
+    public String passwordServers;
 
     public SpreadsheetResourceOAuth() {
     }
 
-    public SpreadsheetResourceOAuth(String domain, boolean clean, String serverURI, Discovery discover) {
+    public SpreadsheetResourceOAuth(String domain, boolean clean, String serverSecret, String apiKey, String apiSecret, String accessTokenStr, String serverURI, Discovery discover) {
         this.domain = domain;
         this.serverURI = serverURI;
         this.discovery = discover;
@@ -78,11 +79,11 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
         config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
         config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
         client = ClientBuilder.newClient(config);
-       
-        createDirectory = new CreateDirectory();
-        deleteDropbox = new DeleteDropbox();
-        download = new Download();
-        uploadDropbox = new UploadDropbox();
+        this.passwordServers = serverSecret;
+        createDirectory = new CreateDirectory(apiKey, apiSecret, accessTokenStr);
+        deleteDropbox = new DeleteDropbox(apiKey, apiSecret, accessTokenStr);
+        download = new Download(apiKey, apiSecret, accessTokenStr);
+        uploadDropbox = new UploadDropbox(apiKey, apiSecret, accessTokenStr);
         json = new Gson();
         if (clean) {
             cleanDropbox();
@@ -549,7 +550,10 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     }
 
     @Override
-    public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId) {
+    public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId, String password) {
+        if (!password.equals(passwordServers)) {
+			throw new WebApplicationException(Status.FORBIDDEN);
+		}
         String[][] values;
         if (userId == null || sheetId == null) {
             throw new WebApplicationException(Status.BAD_REQUEST);
@@ -655,7 +659,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             while (retries < MAX_RETRIES) {
                 try {
                     String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    Response r = target.queryParam("range", range).queryParam("userId", userAux).request()
+                    Response r = target.queryParam("range", range).queryParam("userId", userAux).queryParam("password", passwordServers).request()
                             .accept(MediaType.APPLICATION_JSON).get();
                     String[][] val = r.readEntity(String[][].class);
                     putValuesInCache(sheetURL, range, val);

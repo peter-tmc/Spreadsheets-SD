@@ -13,20 +13,22 @@ import com.github.scribejava.core.oauth.OAuth20Service;
 import com.google.gson.Gson;
 
 import tp1.dropbox.arguments.DeleteV2Args;
-public class DeleteDropbox {
-    private static final String apiKey = "yszklpvd11evujy";
-	private static final String apiSecret = "putbwd4j4rklmq9";
-	private static final String accessTokenStr = "Qj1kumo2dUQAAAAAAAAAAeTMezCIsloWxyc4MzdumyLCQVD7j8ZWXnSDIc3tVLd8";	
+public class DeleteDropbox {	
 	private static final String DELETE_V2_URL = "https://api.dropboxapi.com/2/files/delete_v2";
     protected static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 		
 	private OAuth20Service service;
 	private OAuth2AccessToken accessToken;
-	
+	private String apiKey;
+	private String apiSecret;
+	private String accessTokenStr;	
 	private Gson json;
 
-    public DeleteDropbox() {
-        service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
+    public DeleteDropbox(String apiKey, String apiSecret, String acessTokenStr) {
+        this.apiKey=apiKey;
+        this.apiSecret=apiSecret;
+        this.accessTokenStr=acessTokenStr;
+		service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
 		accessToken = new OAuth2AccessToken(accessTokenStr);
 		json = new Gson();
     }
