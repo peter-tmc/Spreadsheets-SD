@@ -1,10 +1,8 @@
 package tp1.dropbox;
 
-import java.io.IOException;
 import org.pac4j.scribe.builder.api.DropboxApi20;
 
 import tp1.dropbox.arguments.DownloadArgs;
-import tp1.dropbox.arguments.UploadArgs;
 
 import com.github.scribejava.core.builder.ServiceBuilder;
 import com.github.scribejava.core.model.OAuth2AccessToken;
@@ -21,14 +19,10 @@ public class Download {
 		
 	private OAuth20Service service;
 	private OAuth2AccessToken accessToken;
-	private String apiKey;
-	private String apiSecret;
 	private String accessTokenStr;
 	private Gson json;
 
     public Download(String apiKey, String apiSecret, String acessTokenStr){
-        this.apiKey=apiKey;
-        this.apiSecret=apiSecret;
         this.accessTokenStr=acessTokenStr;
         service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);
 		accessToken = new OAuth2AccessToken(accessTokenStr);     

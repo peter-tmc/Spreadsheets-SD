@@ -1,26 +1,16 @@
 package tp1.server.rest.resources;
 
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
-import java.security.GeneralSecurityException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.xml.namespace.QName;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.services.sheets.v4.Sheets;
-import com.google.api.services.sheets.v4.model.ValueRange;
 import com.sun.xml.ws.client.BindingProviderProperties;
 
 import org.glassfish.jersey.client.ClientConfig;
@@ -688,10 +678,8 @@ public class SpreadsheetResource implements RestSpreadsheets {
 								values[i][j] = (String) row.get(j);
 						}
 					} catch (IOException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					} catch (GeneralSecurityException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 					*/

@@ -11,8 +11,6 @@ import java.util.logging.Logger;
 
 import javax.xml.namespace.QName;
 
-import com.gembox.spreadsheet.SpreadsheetException;
-
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
 import com.sun.xml.ws.client.BindingProviderProperties;

@@ -28,7 +28,6 @@ import tp1.dropbox.CreateDirectory;
 import tp1.dropbox.DeleteDropbox;
 import tp1.dropbox.Download;
 import tp1.dropbox.UploadDropbox;
-import tp1.dropbox.arguments.DeleteV2Args;
 import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.server.soap.ws.SpreadsheetsWS;
 import tp1.server.soap.ws.UsersWS;
@@ -50,8 +49,8 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     public final static int RETRY_PERIOD = 1000;
     public final static int CONNECTION_TIMEOUT = 10000;
     public final static int REPLY_TIMEOUT = 600;
-    
     private static final String OVERWRITE = "overwrite";
+
     private int counter = 0;
     //private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
     private static Logger Log = Logger.getLogger(SpreadsheetResourceOAuth.class.getName());
@@ -71,6 +70,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     public SpreadsheetResourceOAuth() {
     }
 
+    //TODO MUDAR PARA NAO USAR O COUNTER
     public SpreadsheetResourceOAuth(String domain, boolean clean, String serverSecret, String apiKey, String apiSecret, String accessTokenStr, String serverURI, Discovery discover) {
         this.domain = domain;
         this.serverURI = serverURI;
@@ -93,7 +93,6 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
 
     private void cleanDropbox() {
         // fazer delete dos ficheiros deste domain na dropbox
-        // TODO
         // criar folder novo para este domain
         deleteDropbox.execute("/"+domain);
     }
@@ -158,7 +157,6 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             throw new WebApplicationException(Status.BAD_REQUEST);
         }
 
-        Spreadsheet sheet = null;
        
             /*
              * sheet = spreadsheets.get(sheetId); if (sheet == null) { throw new

@@ -14,7 +14,6 @@ import javax.xml.namespace.QName;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
 
-import com.gembox.spreadsheet.SpreadsheetException;
 import com.sun.xml.ws.client.BindingProviderProperties;
 
 import jakarta.xml.ws.BindingProvider;
