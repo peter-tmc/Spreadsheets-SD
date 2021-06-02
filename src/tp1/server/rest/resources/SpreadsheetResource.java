@@ -3,19 +3,19 @@ package tp1.server.rest.resources;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
-
 import javax.xml.namespace.QName;
 
+import com.google.gson.Gson;
 import com.sun.xml.ws.client.BindingProviderProperties;
-
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
-
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Client;
@@ -50,16 +50,18 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	public final static int REPLY_TIMEOUT = 600;
 	private static final String GOOGLE_SHEETS = "sheets.googleapis.com";
 	private static final String HTTPS_GOOGLE_SHEET = "https://sheets.googleapis.com/";
+	private static final int VALUES_CACHE_EXPIRATION = 19;
 	private int counter = 0;
 	private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
 	private static Logger Log = Logger.getLogger(SpreadsheetResource.class.getName());
 	Discovery discovery;
 	private String domain;
 	private String serverURI;
-	private Map<String, Map<String, String[][]>> sheetsValuesCache = new HashMap<>();
+	private Map<String, Map<String, CacheEntry>> sheetsValuesCache = new HashMap<>(); //guarda <sheetURL, <range, values>>
 	private Client client;
 	private Map<String, Set<String>> usersSpreadsheets = new HashMap<>();
 	public String passwordServers;
+	private Map<String, Instant> twSheets = new HashMap<>(); 
 	private String googleKey = "AIzaSyCcdXajR6S0xAaMgyPBA-Js_MWFrQFqB8A";
 
 	public SpreadsheetResource() {
@@ -113,6 +115,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 			aux.add(spreadID);
 			usersSpreadsheets.put(owner, aux);
 			spreadsheets.put(spreadID, sheet);
+			twSheets.put(spreadID, Instant.now());
 		}
 		return spreadID;
 	}
@@ -141,6 +144,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 			if (aux != null)
 				aux.remove(sheetId);
 			spreadsheets.remove(sheetId);
+			twSheets.remove(sheetId);
 		}
 	}
 
@@ -270,6 +274,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				throw new WebApplicationException(Status.BAD_REQUEST);
 			}
 			sheet.setCellRawValue(cell, rawValue);
+			twSheets.put(sheetId, Instant.now());
 		}
 	}
 
@@ -310,6 +315,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 			}
 			set.add(userId);
 			sheet.setSharedWith(set);
+			twSheets.put(sheetId, Instant.now());
 		}
 	}
 
@@ -349,6 +355,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				throw new WebApplicationException(Status.NOT_FOUND);
 			}
 			set.remove(userId);
+			twSheets.put(sheetId, Instant.now());
 		}
 	}
 
@@ -452,26 +459,50 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId, String password) {
+	public SPRange getSpreadsheetValuesRange(String sheetId, String range, String userId, String password, String timestamp) {
+		Instant tw = twSheets.get(sheetId);
+		if (tw == null) {
+			System.out.println("importrange3");
+			throw new WebApplicationException(Status.NOT_FOUND);
+		}
+		if(!timestamp.equals("")) {
+			Instant twReceived = Instant.parse(timestamp);
+			if(twReceived.equals(tw)) {
+				SPRange spr = new SPRange();
+				spr.setTimestamp(twReceived.toString());
+				return spr;
+			}
+		}
+		
 		if (!password.equals(passwordServers)) {
 			throw new WebApplicationException(Status.FORBIDDEN);
 		}
 		String[][] values;
+		System.out.println("userID:" + userId);
+		System.out.println("sheetID:" + sheetId);
+		System.out.println("range:" + range);
 		if (userId == null || sheetId == null) {
+			System.out.println("importrange1");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
 
 		Spreadsheet sheet;
 		synchronized (this) {
 			sheet = spreadsheets.get(sheetId);
+			
+			System.out.println("importrange2");
 			if (sheet == null) {
+				
+				System.out.println("importrange3");
 				throw new WebApplicationException(Status.NOT_FOUND);
 			}
 			String aux = userId.split("@")[0];
 			if (!(sheet.getSharedWith().contains(userId) || sheet.getOwner().equals(aux))) {
+				System.out.println("importrange4");
 				throw new WebApplicationException(Status.FORBIDDEN);
 			}
 		}
+		System.out.println("importrange5");
 		CellRange cr = new CellRange(range);
 		String[][] rangeVal = cr.extractRangeValuesFrom(sheet.getRawValues());
 		values = SpreadsheetEngineImpl.getInstance().computeSpreadsheetValues(new AbstractSpreadsheet() {
@@ -509,22 +540,33 @@ public class SpreadsheetResource implements RestSpreadsheets {
 					e.printStackTrace();
 					return null;
 				}
-
 				return val;
-
 			}
 		});
-
-		return values;
+		System.out.println("importrange6");
+		SPRange res = new SPRange(tw.toString(), sheet.getSharedWith(), values);
+		System.out.println("importrange7");
+		System.out.println(res.toString());
+		return res;
 	}
-
-	protected void putValuesInCache(String sheetURL, String range, String[][] values) {
+	protected void putValuesInCache(String sheetURL, String range, SPRange val) {
 		synchronized (this) {
-			Map<String, String[][]> aux = sheetsValuesCache.get(sheetURL);
-			if (aux == null)
+			System.out.println("put1");
+			Map<String, CacheEntry> aux = sheetsValuesCache.get(sheetURL);
+			System.out.println("put2");
+			if (aux == null) {
 				aux = new HashMap<>();
-			aux.put(range, values);
-			sheetsValuesCache.put(sheetURL, aux);
+				sheetsValuesCache.put(sheetURL, aux);
+			}
+			CacheEntry entry = aux.get(range);
+			if(entry == null) {
+				entry = new CacheEntry(val);
+				aux.put(range, entry);
+			}
+			if(!val.getTimestamp().equals(entry.getTw().toString()))
+				entry = new CacheEntry(val);
+			else
+				entry.setTc(Instant.now());
 		}
 	}
 
@@ -541,21 +583,58 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	 *                        request answered with an exception
 	 */
 	private String[][] getRangeValuesRequest(String sheetURL, String range, Spreadsheet sheet) throws SheetsException {
+		
+		System.out.println("reqrange1");
+		Map<String, CacheEntry> mapaux = sheetsValuesCache.get(sheetURL);
+		CacheEntry ce = null;
+		String tc = "";
+		if(mapaux != null) {
+			ce = mapaux.get(range);
+			System.out.println("reqrange2");
+			
+			if(ce != null) {
+				System.out.println("cache1");
+				tc = ce.getTc().toString();
+				System.out.println("cache2");
+				//Duration timeBetween = Duration.between(Instant.now(), ce.getTc());
+				System.out.println("cache3");
+				//if(timeBetween.getSeconds() < VALUES_CACHE_EXPIRATION) {
+					
+				if(!Instant.now().isAfter(ce.getTc().plusSeconds(VALUES_CACHE_EXPIRATION))) {
+					System.out.println("cache4");
+					return ce.getValues();
+				}
+			}
+		}
+			
 		if (sheetURL.contains("rest")) {
-
+			
+			System.out.println("req1");
+			System.out.println(sheetURL);
 			WebTarget target = client.target(sheetURL).path("range");
-
+			System.out.println("req2");
 			short retries = 0;
 			while (retries < MAX_RETRIES) {
 				try {
 					String userAux = String.format("%s@%s", sheet.getOwner(), domain);
+					System.out.println("req3");
+					//String sheetId, String range, String userId, String password, String timestamp
 					Response r = target.queryParam("range", range).queryParam("userId", userAux)
-							.queryParam("password", passwordServers).request().accept(MediaType.APPLICATION_JSON).get();
+							.queryParam("password", passwordServers).queryParam("timestamp", tc)
+							.request()
+							.accept(MediaType.APPLICATION_JSON)
+							.get();	
+					System.out.println("req4");
+					System.out.println(r.toString());
+					Gson json = new Gson();
 					if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
-						String[][] val = r.readEntity(String[][].class);
+						System.out.println("req5");
+						//VAI GSON VAI GSON VAI GSON
+						SPRange val = json.fromJson(r.readEntity(String.class), SPRange.class);
+						System.out.println("req6");
 						putValuesInCache(sheetURL, range, val);
 						//Log.severe(val.toString());
-						return val;
+						return val.getValues();
 					} else {
 						System.err.println(r.getStatus());
 						throw new WebApplicationException(r.getStatus());
@@ -610,7 +689,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 					try {
 						String userAux = String.format("%s@%s", sheet.getOwner(), domain);
 						String[][] values = spsheets.getSpreadsheetValuesRange(str[1], range, userAux);
-						putValuesInCache(sheetURL, range, values);
+						//putValuesInCache(sheetURL, range, values);
 						return values;
 					} catch (SheetsException e) {
 						System.out.println("Cound not get spreadsheet: " + e.getMessage());
@@ -640,7 +719,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 									.request().accept(MediaType.APPLICATION_JSON).get();
 							if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
 								String[][] val = r.readEntity(GoogleSheetsReturn.class).getValues();
-								putValuesInCache(sheetURL, range, val);
+								//putValuesInCache(sheetURL, range, val);
 								//Log.severe(val.toString());
 								return val;
 							} else {
@@ -691,8 +770,8 @@ public class SpreadsheetResource implements RestSpreadsheets {
 
 	protected String[][] getValuesInCache(String sheetURL, String range) {
 		synchronized (this) {
-			Map<String, String[][]> aux = sheetsValuesCache.get(sheetURL);
-			return aux.get(range);
+			Map<String, CacheEntry> aux = sheetsValuesCache.get(sheetURL);
+			return aux.get(range).getValues();
 		}
 	}
 
@@ -706,6 +785,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 			if (sheetsUser != null) {
 				for (String spId : sheetsUser) {
 					spreadsheets.remove(spId);
+					twSheets.remove(spId);
 				}
 			}
 		}

@@ -76,6 +76,16 @@
 	</build>
 	<dependencies>
 		<dependency>
+			<groupId>joda-time</groupId>
+			<artifactId>joda-time</artifactId>
+			<version>2.10.10</version>
+		</dependency>
+		<dependency>
+			<groupId>dev.holt</groupId>
+			<artifactId>java-time-literals_2.12</artifactId>
+			<version>1.0.0</version>
+		</dependency>
+		<dependency>
 			<groupId>com.github.scribejava</groupId>
 			<artifactId>scribejava-apis</artifactId>
 		</dependency>

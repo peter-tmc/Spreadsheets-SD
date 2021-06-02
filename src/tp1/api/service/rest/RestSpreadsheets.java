@@ -1,5 +1,4 @@
 package tp1.api.service.rest;
-
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -11,6 +10,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import tp1.api.Spreadsheet;
+import tp1.server.rest.resources.SPRange;
 
 
 @Path(RestSpreadsheets.PATH)
@@ -160,8 +160,8 @@ public interface RestSpreadsheets {
 	@GET
 	@Path("/{sheetId}/range")
 	@Produces(MediaType.APPLICATION_JSON)
-	String[][] getSpreadsheetValuesRange(@PathParam("sheetId") String sheetId, 
-				@QueryParam("range") String range, @QueryParam("userId") String userId, @QueryParam("password") String password);
+	SPRange getSpreadsheetValuesRange(@PathParam("sheetId") String sheetId, 
+				@QueryParam("range") String range, @QueryParam("userId") String userId, @QueryParam("password") String password, @QueryParam("timestamp") String timestamp);
 
 	/**
 	 * Deletes the spreadsheets of the specified user

@@ -476,8 +476,10 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
             while (retries < MAX_RETRIES) {
                 try {
                     String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    Response r = target.queryParam("range", range).queryParam("userId", userAux).queryParam("password", passwordServers).request()
-                            .accept(MediaType.APPLICATION_JSON).get();
+                    Response r = target.queryParam("range", range).queryParam("userId", userAux).queryParam("password", passwordServers)
+                            .request()
+                            .accept(MediaType.APPLICATION_JSON)
+                            .get();
                     String[][] val = r.readEntity(String[][].class);
                     putValuesInCache(sheetURL, range, val);
                     return val;
