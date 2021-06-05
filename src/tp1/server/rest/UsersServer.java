@@ -36,7 +36,7 @@ public class UsersServer {
 			discover.start(null, args[0], SERVICE, serverURI);
 
 			ResourceConfig config = new ResourceConfig();
-			config.register(new UsersResource(args[0], discover));
+			config.register(new UsersResource(args[0], discover, args[1]));
 			JdkHttpServerFactory.createHttpServer(URI.create(serverURI), config, SSLContext.getDefault());
 			// Discovery discover = new Discovery(args[0], SERVICE, serverURI);
 

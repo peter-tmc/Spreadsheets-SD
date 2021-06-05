@@ -98,7 +98,7 @@ public interface SoapSpreadsheets {
 	 * 
 	 * @throws SheetsException otherwise
 	 */
-	String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId) throws SheetsException;
+	String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId, String serverSecret) throws SheetsException;
 
 	/**
 	 * Deletes the spreadsheets of the specified user
@@ -106,5 +106,5 @@ public interface SoapSpreadsheets {
 	 * @param password - password known between servers to avoid users deleting other sheets
 	 *
 	 */
-	void deleteUser(String userId, String password) throws SheetsException;
+	void deleteUser(String userId, String serverSecret) throws SheetsException;
 }

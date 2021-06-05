@@ -3,6 +3,7 @@ package tp1.server.soap.ws;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -13,6 +14,8 @@ import javax.xml.namespace.QName;
 
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
+
+import com.google.gson.Gson;
 import com.sun.xml.ws.client.BindingProviderProperties;
 
 import jakarta.xml.ws.BindingProvider;
@@ -30,6 +33,8 @@ import tp1.api.engine.AbstractSpreadsheet;
 import tp1.Discovery;
 import tp1.api.service.soap.SoapSpreadsheets;
 import tp1.api.service.soap.SoapUsers;
+import tp1.impl.cache.CacheEntry;
+import tp1.impl.cache.SPRange;
 import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.api.service.rest.RestUsers;
 import tp1.api.service.soap.SheetsException;
@@ -41,26 +46,28 @@ import tp1.api.service.soap.UsersException;
 @WebService(serviceName = SoapSpreadsheets.NAME, targetNamespace = SoapSpreadsheets.NAMESPACE, endpointInterface = SoapSpreadsheets.INTERFACE)
 public class SpreadsheetsWS implements SoapSpreadsheets {
 
-    public final static int MAX_RETRIES = 3;
-    public final static int RETRY_PERIOD = 1000;
-    public final static int CONNECTION_TIMEOUT = 10000;
-    public final static int REPLY_TIMEOUT = 600;
+    private final static int MAX_RETRIES = 3;
+    private final static int RETRY_PERIOD = 1000;
+    private final static int CONNECTION_TIMEOUT = 10000;
+    private final static int REPLY_TIMEOUT = 600;
     public static final String SPREADSHEETS_WSDL = "/spreadsheets/?wsdl";
+	private static final int VALUES_CACHE_EXPIRATION = 20;
     //public final static String passwordServers= "serversidepsswd";
     private int counter = 0;
     private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
     Discovery discovery;
     private String domain;
     private String serverURI;
-    private Map<String, Map<String, String[][]>> sheetsValuesCache = new HashMap<>();
+    private Map<String, Map<String, CacheEntry>> sheetsValuesCache = new HashMap<>();
     private static Logger Log = Logger.getLogger(SpreadsheetsWS.class.getName());
     private Client client;
     private Map<String, Set<String>> usersSpreadsheets = new HashMap<>();
-    public String passwordServers;
+    private String passwordServers;
     public SpreadsheetsWS() {
 
     }
 
+    //TODO MUITO IMPORTANTE server secret do soap
     public SpreadsheetsWS(String domain, String password, String serverURI, Discovery discover) {
         this.domain = domain;
         this.serverURI = serverURI;
@@ -468,35 +475,72 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
      *                        request answered with an exception
      */
     private String[][] getRangeValuesRequest(String sheetURL, String range, Spreadsheet sheet) throws SheetsException {
+        System.out.println("reqrange1");
+		Map<String, CacheEntry> mapaux = sheetsValuesCache.get(sheetURL);
+		CacheEntry ce = null;
+		String tc = "";
+		if(mapaux != null) {
+			ce = mapaux.get(range);
+			System.out.println("reqrange2");
+			
+			if(ce != null) {
+				System.out.println("cache1");
+				tc = ce.getTc().toString();
+				System.out.println("cache2");
+				//Duration timeBetween = Duration.between(Instant.now(), ce.getTc());
+				System.out.println("cache3");
+				//if(timeBetween.getSeconds() < VALUES_CACHE_EXPIRATION) {
+					
+				if(!Instant.now().isAfter(ce.getTc().plusSeconds(VALUES_CACHE_EXPIRATION))) {
+					System.out.println("cache4");
+					return ce.getValues();
+				}
+			}
+		}
         if (sheetURL.contains("rest")) {
+			System.out.println("req1");
+			System.out.println(sheetURL);
+			WebTarget target = client.target(sheetURL).path("range");
+			System.out.println("req2");
+			short retries = 0;
+			while (retries < MAX_RETRIES) {
+				try {
+					String userAux = String.format("%s@%s", sheet.getOwner(), domain);
+					System.out.println("req3");
+					//String sheetId, String range, String userId, String password, String timestamp
+					Response r = target.queryParam("range", range).queryParam("userId", userAux)
+							.queryParam("password", passwordServers).queryParam("timestamp", tc)
+							.request()
+							.accept(MediaType.APPLICATION_JSON)
+							.get();	
+					System.out.println("req4");
+					System.out.println(r.toString());
+					Gson json = new Gson();
+					if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
+						System.out.println("req5");
+						//VAI GSON VAI GSON VAI GSON
+						SPRange val = json.fromJson(r.readEntity(String.class), SPRange.class);
+						System.out.println("req6");
+						putValuesInCache(sheetURL, range, val);
+						//Log.severe(val.toString());
+						return val.getValues();
+					} else {
+						System.err.println(r.getStatus());
+						throw new WebApplicationException(r.getStatus());
+					}
+				} catch (ProcessingException pe) {
+					System.out.println("Timeout occurred");
+					pe.printStackTrace();
+					retries++;
+					try {
+						Thread.sleep(RETRY_PERIOD);
+					} catch (InterruptedException e) {
 
-            WebTarget target = client.target(sheetURL).path("range");
-
-            short retries = 0;
-            while (retries < MAX_RETRIES) {
-                try {
-                    String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    Response r = target.queryParam("range", range).queryParam("userId", userAux).queryParam("password", passwordServers)
-                            .request()
-                            .accept(MediaType.APPLICATION_JSON)
-                            .get();
-                    String[][] val = r.readEntity(String[][].class);
-                    putValuesInCache(sheetURL, range, val);
-                    return val;
-                } catch (ProcessingException pe) {
-                    System.out.println("Timeout occurred");
-                    pe.printStackTrace();
-                    retries++;
-                    try {
-                        Thread.sleep(RETRY_PERIOD);
-                    } catch (InterruptedException e) {
-
-                    }
-                    System.out.println("Retrying to execute request.");
-                }
-            }
+					}
+					System.out.println("Retrying to execute request.");
+				}
+			}
         } else {
-
             SoapSpreadsheets spsheets = null;
             short retries = 0;
             boolean success = false;
@@ -531,8 +575,8 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
 
                 try {
                     String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    String[][] values = spsheets.getSpreadsheetValuesRange(str[1], range, userAux);
-                    putValuesInCache(sheetURL, range, values);
+                    String[][] values = spsheets.getSpreadsheetValuesRange(str[1], range, userAux, passwordServers);
+                    //putValuesInCache(sheetURL, range, values);
                     return values;
                 } catch (SheetsException e) {
                     System.out.println("Cound not get spreadsheet: " + e.getMessage());
@@ -556,16 +600,16 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
 
     protected String[][] getValuesInCache(String sheetURL, String range) {
         synchronized (this) {
-            Map<String, String[][]> aux = sheetsValuesCache.get(sheetURL);
+            Map<String, CacheEntry> aux = sheetsValuesCache.get(sheetURL);
             if (aux == null)
                 return null;
-            return aux.get(range);
+            return aux.get(range).getValues();
         }
     }
 
     @Override
-    public void deleteUser(String userId, String password) throws SheetsException {
-        if(!password.equals(passwordServers)) {
+    public void deleteUser(String userId, String serverSecret) throws SheetsException {
+        if(!serverSecret.equals(passwordServers)) {
             throw new SheetsException("FORBIDDEN");
         }
         synchronized (this) {
@@ -579,8 +623,11 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
     }
 
     @Override
-    public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId) throws SheetsException {
+    public String[][] getSpreadsheetValuesRange(String sheetId, String range, String userId, String serverSecret) throws SheetsException {
         String[][] values;
+        if(!serverSecret.equals(passwordServers)){
+            throw new SheetsException("FORBIDDEN");
+        }
         if (userId == null || sheetId == null) {
             throw new SheetsException();
         }
@@ -644,13 +691,24 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
         return values;
     }
 
-    protected void putValuesInCache(String sheetURL, String range, String[][] values) {
+    protected void putValuesInCache(String sheetURL, String range, SPRange val) {
         synchronized (this) {
-            Map<String, String[][]> aux = sheetsValuesCache.get(sheetURL);
-            if (aux == null)
-                aux = new HashMap<>();
-            aux.put(range, values);
-            sheetsValuesCache.put(sheetURL, aux);
-        }
+			System.out.println("put1");
+			Map<String, CacheEntry> aux = sheetsValuesCache.get(sheetURL);
+			System.out.println("put2");
+			if (aux == null) {
+				aux = new HashMap<>();
+				sheetsValuesCache.put(sheetURL, aux);
+			}
+			CacheEntry entry = aux.get(range);
+			if(entry == null) {
+				entry = new CacheEntry(val);
+				aux.put(range, entry);
+			}
+			if(!val.getTimestamp().equals(entry.getTw().toString()))
+				entry = new CacheEntry(val);
+			else
+				entry.setTc(Instant.now());
+		}
     }
 }

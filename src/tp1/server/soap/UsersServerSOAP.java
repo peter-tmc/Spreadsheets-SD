@@ -43,7 +43,7 @@ public class UsersServerSOAP {
 			Discovery discover = Discovery.getInstance();
 			discover.start(null, domain, SERVICE, serverURI);
 
-			Endpoint soapUsersEndpoint = Endpoint.create(new UsersWS(domain, discover));
+			Endpoint soapUsersEndpoint = Endpoint.create(new UsersWS(domain, discover, args[1]));
 
 			soapUsersEndpoint.publish(server.createContext(SOAP_USERS_PATH));
 

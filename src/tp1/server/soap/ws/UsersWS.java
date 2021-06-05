@@ -46,24 +46,25 @@ public class UsersWS implements SoapUsers {
 	private static Logger Log = Logger.getLogger(UsersWS.class.getName());
 	private Client client;
 
-	public final static int MAX_RETRIES = 3;
-	public final static int RETRY_PERIOD = 1000;
-	public final static int CONNECTION_TIMEOUT = 10000;
-	public final static int REPLY_TIMEOUT = 600;
-	public final static String passwordServers= "serversidepsswd";
+	private final static int MAX_RETRIES = 3;
+	private final static int RETRY_PERIOD = 1000;
+	private final static int CONNECTION_TIMEOUT = 10000;
+	private final static int REPLY_TIMEOUT = 600;
+	private String passwordServers;
 
 	public static final String USERS_WSDL = "/users/?wsdl";
 
 	public UsersWS() {
 	}
 
-	public UsersWS(String domain, Discovery discover) {
+	public UsersWS(String domain, Discovery discover, String passwordServers) {
 		this.domain = domain;
 		this.discover = discover;
 		ClientConfig config = new ClientConfig();
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		client = ClientBuilder.newClient(config);
+		this.passwordServers= passwordServers;
 	}
 
 	@Override

@@ -1,4 +1,4 @@
-package tp1.server.rest.resources;
+package tp1.server.replication.rest.resources;
 
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Logger;
 import javax.xml.namespace.QName;
 
@@ -30,6 +31,7 @@ import tp1.Discovery;
 import tp1.api.GoogleSheetsReturn;
 import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
+import tp1.api.service.rest.RestRepSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
 import tp1.api.service.rest.RestUsers;
 import tp1.api.service.soap.SheetsException;
@@ -42,8 +44,12 @@ import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.server.soap.ws.SpreadsheetsWS;
 import tp1.server.soap.ws.UsersWS;
 import tp1.util.CellRange;
+import tp1.zookeeper.ZookeeperProcessor;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import java.util.List;
 
-public class SpreadsheetResource implements RestSpreadsheets {
+public class SpreadsheetRepResource implements RestRepSpreadsheets {
 
 	private final static int MAX_RETRIES = 3;
 	private final static int RETRY_PERIOD = 1000;
@@ -54,7 +60,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	private static final int VALUES_CACHE_EXPIRATION = 20;
 	private int counter = 0;
 	private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
-	private static Logger Log = Logger.getLogger(SpreadsheetResource.class.getName());
+	private static Logger Log = Logger.getLogger(SpreadsheetRepResource.class.getName());
 	private Discovery discovery;
 	private String domain;
 	private String serverURI;
@@ -64,11 +70,15 @@ public class SpreadsheetResource implements RestSpreadsheets {
 	private String passwordServers;
 	private Map<String, Instant> twSheets = new HashMap<>(); 
 	private String googleKey = "AIzaSyCcdXajR6S0xAaMgyPBA-Js_MWFrQFqB8A";
+	private ZookeeperProcessor zk;
+	private String path;
+	private boolean primary;
+	private URI primaryURI;
 
-	public SpreadsheetResource() {
+	public SpreadsheetRepResource() {
 	}
 
-	public SpreadsheetResource(String domain, String serverSecret, String serverURI, Discovery discover) {
+	public SpreadsheetRepResource(String domain, String serverSecret, String serverURI, Discovery discover, ZookeeperProcessor zk, String path) {
 		this.domain = domain;
 		this.serverURI = serverURI;
 		this.discovery = discover;
@@ -77,53 +87,76 @@ public class SpreadsheetResource implements RestSpreadsheets {
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		client = ClientBuilder.newClient(config);
 		passwordServers = serverSecret;
+		this.zk = zk;
+		this.path = path;
+		zk.getChildren( path, new Watcher() {
+			@Override
+			public void process(WatchedEvent event) {
+				List<String> lst = zk.getChildren( path, this);
+				int minNum = Integer.MAX_VALUE;
+				String minPath = "";
+				for(String s: lst) {
+					int curr = Integer.parseInt(s.split("_")[1]);
+					if(minNum<curr){
+						minNum=curr;
+						minPath = s;
+					}
+				}
+				primaryURI = zk.readURI(path);
+				if(minPath.equals(path))
+					primary = true;
+			}
+		});
 	}
 
 	@Override
 	public String createSpreadsheet(Spreadsheet sheet, String password) {
-		if (!(sheet.getSheetId() == null && sheet.getSheetURL() == null && sheet.getColumns() >= 0
+		if(primary) {
+			if (!(sheet.getSheetId() == null && sheet.getSheetURL() == null && sheet.getColumns() >= 0
 				&& sheet.getRows() >= 0)) {
 			throw new WebApplicationException(Status.BAD_REQUEST);
-		}
-		String owner = sheet.getOwner();
+			}
+			String owner = sheet.getOwner();
 
-		int response = 0;
-		try {
-			response = getUser(domain, owner, password);
-			if (response != Status.OK.getStatusCode()) {
+			int response = 0;
+			try {
+				response = getUser(domain, owner, password);
+				if (response != Status.OK.getStatusCode()) {
+					throw new WebApplicationException(Status.BAD_REQUEST);
+				}
+			} catch (UsersException e1) {
 				throw new WebApplicationException(Status.BAD_REQUEST);
 			}
-		} catch (UsersException e1) {
-			throw new WebApplicationException(Status.BAD_REQUEST);
-		}
 
-		String spreadID = null;
+			String spreadID = null;
 
-		spreadID = String.format("%s-%d", owner, counter++);
-		sheet.setSheetId(spreadID);
-		String url = String.format("%s/spreadsheets/%s", serverURI, spreadID);
-		sheet.setSheetURL(url);
-		Set<String> sw = sheet.getSharedWith();
-		if (sw == null) {
-			sw = new HashSet<>();
-			sheet.setSharedWith(sw);
-		}
-		synchronized (this) {
-			Set<String> aux = usersSpreadsheets.get(owner);
-			if (aux == null) {
-				aux = new HashSet<String>();
+			spreadID = String.format("%s_%d", owner, UUID.randomUUID());
+			sheet.setSheetId(spreadID);
+			String url = String.format("%s/spreadsheets/%s", serverURI, spreadID);
+			sheet.setSheetURL(url);
+			Set<String> sw = sheet.getSharedWith();
+			if (sw == null) {
+				sw = new HashSet<>();
+				sheet.setSharedWith(sw);
 			}
-			aux.add(spreadID);
-			usersSpreadsheets.put(owner, aux);
-			spreadsheets.put(spreadID, sheet);
-			twSheets.put(spreadID, Instant.now());
+			synchronized (this) {
+				Set<String> aux = usersSpreadsheets.get(owner);
+				if (aux == null) {
+					aux = new HashSet<String>();
+				}
+				aux.add(spreadID);
+				usersSpreadsheets.put(owner, aux);
+				spreadsheets.put(spreadID, sheet);
+				twSheets.put(spreadID, Instant.now());
+			}
+			return spreadID;
 		}
-		return spreadID;
+		else throw new WebApplicationException(Response.temporaryRedirect(primaryURI).build());
 	}
 
 	@Override
 	public void deleteSpreadsheet(String sheetId, String password) {
-		String owner = sheetId.split("-")[0];
+		String owner = sheetId.split("_")[0];
 
 		int response = 0;
 		try {
@@ -294,7 +327,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 		}
 
 		response = 0;
-		String owner = sheetId.split("-")[0];
+		String owner = sheetId.split("_")[0];
 		try {
 			response = getUser(domain, owner, password);
 			if (response != Status.OK.getStatusCode()) {
@@ -335,7 +368,7 @@ public class SpreadsheetResource implements RestSpreadsheets {
 		}
 
 		response = 0;
-		String owner = sheetId.split("-")[0];
+		String owner = sheetId.split("_")[0];
 		try {
 			response = getUser(domain, owner, password);
 			if (response != Status.OK.getStatusCode()) {
@@ -768,5 +801,69 @@ public class SpreadsheetResource implements RestSpreadsheets {
 				}
 			}
 		}
+	}
+
+	@Override
+	public void createSpreadsheetRep(String id, Spreadsheet sheet, String password, String serverSecret) {
+		// TODO Auto-generated method stub
+		if(!serverSecret.equals(passwordServers))
+			throw new WebApplicationException(Status.FORBIDDEN);
+		if (!(sheet.getSheetId() == null && sheet.getSheetURL() == null && sheet.getColumns() >= 0
+				&& sheet.getRows() >= 0)) {
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+		String owner = sheet.getOwner();
+
+		int response = 0;
+		try {
+			response = getUser(domain, owner, password);
+			if (response != Status.OK.getStatusCode()) {
+				throw new WebApplicationException(Status.BAD_REQUEST);
+			}
+		} catch (UsersException e1) {
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+
+		String spreadID = id;
+		
+		sheet.setSheetId(spreadID);
+		String url = String.format("%s/spreadsheets/%s", serverURI, spreadID);
+		sheet.setSheetURL(url);
+		Set<String> sw = sheet.getSharedWith();
+		if (sw == null) {
+			sw = new HashSet<>();
+			sheet.setSharedWith(sw);
+		}
+	}
+
+	@Override
+	public void deleteSpreadsheetRep(String sheetId, String password, String serverSecret) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void updateCellRep(String sheetId, String cell, String rawValue, String userId, String password,
+			String serverSecret) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void shareSpreadsheetRep(String sheetId, String userId, String password, String serverSecret) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void unshareSpreadsheetRep(String sheetId, String userId, String password, String serverSecret) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void deleteUserRep(String userId, String password) {
+		// TODO Auto-generated method stub
+		
 	}
 }

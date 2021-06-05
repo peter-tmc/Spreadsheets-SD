@@ -39,6 +39,7 @@ public class DeleteDropbox {
 
         try {
             r = service.execute(delete);
+			//System.out.println("delete :" + r.getCode());
         }
         catch (Exception e) {
 			e.printStackTrace();

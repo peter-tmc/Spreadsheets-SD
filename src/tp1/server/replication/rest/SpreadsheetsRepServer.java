@@ -1,4 +1,4 @@
-package tp1.server.rest;
+package tp1.server.replication.rest;
 
 import java.net.InetAddress;
 import java.net.URI;
@@ -9,18 +9,22 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.xml.namespace.QName;
 
+
+
 import org.glassfish.jersey.jdkhttp.JdkHttpServerFactory;
 import org.glassfish.jersey.server.ResourceConfig;
 
 import jakarta.xml.ws.Service;
 import tp1.Discovery;
 import tp1.api.service.soap.SoapUsers;
-import tp1.server.rest.resources.SpreadsheetResource;
+import tp1.server.replication.rest.resources.SpreadsheetRepResource;
 import tp1.util.InsecureHostnameVerifier;
+import tp1.zookeeper.ZookeeperProcessor;
+import org.apache.zookeeper.CreateMode;
 
-public class SpreadsheetsServer {
+public class SpreadsheetsRepServer {
 
-    private static Logger Log = Logger.getLogger(SpreadsheetsServer.class.getName());
+    private static Logger Log = Logger.getLogger(SpreadsheetsRepServer.class.getName());
 
     static {
         System.setProperty("java.net.preferIPv4Stack", "true");
@@ -38,7 +42,8 @@ public class SpreadsheetsServer {
             ResourceConfig config = new ResourceConfig();
             Discovery discover = Discovery.getInstance();
             String serverURI = String.format("https://%s:%s/rest", ip, PORT);
-            discover.start(null, args[0], SERVICE, serverURI);
+            String domain = args[0];
+            discover.start(null, domain, SERVICE, serverURI);
             Thread.sleep(2000);
             URI[] uris = Discovery.getInstance().knownUrisOf("users");
             for (URI u : uris) {
@@ -48,9 +53,11 @@ public class SpreadsheetsServer {
                     service.getPort(SoapUsers.class);
                 }
             }
-            config.register(new SpreadsheetResource(args[0], args[1], serverURI, discover));
+            ZookeeperProcessor zk = new ZookeeperProcessor( "localhost:2181,kafka:2181");
+            zk.write(domain, CreateMode.PERSISTENT);
+            String path = zk.write(domain + "/bla_", serverURI, CreateMode.EPHEMERAL_SEQUENTIAL);
+            config.register(new SpreadsheetRepResource(domain, args[1], serverURI, discover, zk, path));
             JdkHttpServerFactory.createHttpServer(URI.create(serverURI), config, SSLContext.getDefault());
-
             Log.info(String.format("%s Server ready @ %s\n", SERVICE, serverURI));
 
             // More code can be executed here...

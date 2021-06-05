@@ -42,23 +42,24 @@ public class UsersResource implements RestUsers {
 	private String domain;
 	private Discovery discover;
 	private Client client;
-	public final static int MAX_RETRIES = 3;
-	public final static int RETRY_PERIOD = 1000;
-	public final static int CONNECTION_TIMEOUT = 10000;
-	public final static int REPLY_TIMEOUT = 600;
-	public final static String passwordServers= "serversidepsswd";
+	private final static int MAX_RETRIES = 3;
+	private final static int RETRY_PERIOD = 1000;
+	private final static int CONNECTION_TIMEOUT = 10000;
+	private final static int REPLY_TIMEOUT = 600;
+	private  String passwordServers;
 	private static Logger Log = Logger.getLogger(UsersResource.class.getName());
 
 	public UsersResource() {
 	}
 
-	public UsersResource(String domain, Discovery discover) {
+	public UsersResource(String domain, Discovery discover, String passwordServers) {
 		this.domain = domain;
 		this.discover = discover;
 		ClientConfig config = new ClientConfig();
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		client = ClientBuilder.newClient(config);
+		this.passwordServers = passwordServers;
 	}
 
 	@Override

@@ -2,6 +2,7 @@ package tp1.dropbox;
 
 import org.pac4j.scribe.builder.api.DropboxApi20;
 
+import jakarta.ws.rs.ProcessingException;
 import tp1.dropbox.arguments.DownloadArgs;
 
 import com.github.scribejava.core.builder.ServiceBuilder;
@@ -16,6 +17,7 @@ public class Download {
    
 	private static final String DOWNLOAD_V2_URL = "https://content.dropboxapi.com/2/files/download";
     protected static final String CONTENT_TYPE = "application/octet-stream";
+    private static final long RETRY_PERIOD = 7000;
 		
 	private OAuth20Service service;
 	private OAuth2AccessToken accessToken;
@@ -36,16 +38,36 @@ public class Download {
         service.signRequest(accessToken, download);
 
         Response r = null;
-
+        int retries = 0;
+        while(retries < 3)
         try {
             r = service.execute(download);
+            /* System.out.println(r.getCode());
+            System.out.println(r.getBody()); */
             if(r.getCode() == 200)
                 return r.getBody();
-            else return null;
+            if(r.getCode() == 429) {
+                try {
+                    System.out.println("download :" + r.getCode());
+                    Thread.sleep(RETRY_PERIOD);
+                } catch (InterruptedException e) {
+    
+                }
+                continue;
+            }
+            throw new Exception(r.toString());
+        }
+        catch(ProcessingException pe) {
+            try {
+                Thread.sleep(RETRY_PERIOD);
+            } catch (InterruptedException e) {
+
+            }
         }
         catch (Exception e) {
 			e.printStackTrace();
 			return null;
 		}
+        return null;
     }
 }

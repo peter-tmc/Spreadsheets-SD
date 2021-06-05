@@ -40,6 +40,7 @@ public class UploadDropbox {
 
         try {
             r = service.execute(upload);
+			//System.out.println("upload :" + r.getCode());
         }
         catch (Exception e) {
 			e.printStackTrace();
