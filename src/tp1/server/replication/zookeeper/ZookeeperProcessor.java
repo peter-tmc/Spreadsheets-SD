@@ -1,4 +1,4 @@
-package tp1.zookeeper;
+package tp1.server.replication.zookeeper;
 
 import java.net.URI;
 import java.util.List;
@@ -24,9 +24,11 @@ public class ZookeeperProcessor implements Watcher {
 	
 	public URI readURI(String path) {
 		try {
-			return URI.create(String.valueOf(zk.getData(path, null, new Stat())));
+			//System.out.println("aaaah "+ path);
+			String ur =new String(zk.getData(path, null, new Stat()));
+			//System.out.println(ur);
+			return URI.create(ur);
 		} catch (KeeperException | InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return null;

@@ -34,6 +34,7 @@ import tp1.api.service.rest.RestUsers;
 import tp1.api.service.soap.SheetsException;
 import tp1.api.service.soap.SoapSpreadsheets;
 import tp1.server.soap.ws.SpreadsheetsWS;
+import tp1.util.DiscoveryURI;
 
 @Singleton
 public class UsersResource implements RestUsers {
@@ -189,7 +190,7 @@ public class UsersResource implements RestUsers {
 	 *
 	 */
 	private void deleteUserSpreadsheets(String userId) {
-		URI[] uris = null;
+		DiscoveryURI[] uris = null;
 		while ((uris = discover.knownUrisOf(domain, "sheets")) == null) {
 			try {
 				Thread.sleep(500);
@@ -198,14 +199,14 @@ public class UsersResource implements RestUsers {
 			}
 		}
 
-		if (uris[0].toString().contains("soap")) {
+		if (uris[0].getURI().contains("soap")) {
 			SoapSpreadsheets spsheets = null;
 			short retries = 0;
 			boolean success = false;
 			while (!success && retries < MAX_RETRIES) {
 				try {
 					QName QNAME = new QName(SoapSpreadsheets.NAMESPACE, SoapSpreadsheets.NAME);
-					Service service = Service.create(new URL(uris[0].toString() + SpreadsheetsWS.SPREADSHEETS_WSDL),
+					Service service = Service.create(new URL(uris[0].getURI() + SpreadsheetsWS.SPREADSHEETS_WSDL),
 							QNAME);
 					spsheets = service.getPort(tp1.api.service.soap.SoapSpreadsheets.class);
 					success = true;
@@ -251,7 +252,7 @@ public class UsersResource implements RestUsers {
 			}
 
 		} else {
-			WebTarget target = client.target(uris[0].toString()).path(RestSpreadsheets.PATH);
+			WebTarget target = client.target(uris[0].getURI()).path(RestSpreadsheets.PATH);
 
 			short retries = 0;
 

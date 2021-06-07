@@ -6,6 +6,7 @@ import org.glassfish.jersey.server.ResourceConfig;
 import tp1.Discovery;
 import tp1.api.service.soap.SoapUsers;
 import tp1.server.rest.resources.SpreadsheetResourceOAuth;
+import tp1.util.DiscoveryURI;
 import tp1.util.InsecureHostnameVerifier;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -38,11 +39,11 @@ public class SpreadsheetsServerOAuth {
             String serverURI = String.format("https://%s:%s/rest", ip, PORT);
             discover.start(null, args[0], SERVICE, serverURI);
             Thread.sleep(2000);
-            URI[] uris = Discovery.getInstance().knownUrisOf("users");
-            for (URI u : uris) {
-                if (u.toString().contains("soap")) {
+            DiscoveryURI[] uris = Discovery.getInstance().knownUrisOf("users");
+            for (DiscoveryURI u : uris) {
+                if (u.getURI().contains("soap")) {
                     QName QNAME = new QName(SoapUsers.NAMESPACE, SoapUsers.NAME);
-                    Service service = Service.create(new URL(u.toString() + "/users/?wsdl"), QNAME);
+                    Service service = Service.create(new URL(u.getURI() + "/users/?wsdl"), QNAME);
                     service.getPort(SoapUsers.class);
                 }
             }

@@ -15,6 +15,8 @@ import jakarta.xml.ws.Service;
 import jakarta.xml.ws.WebServiceException;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
+import org.shaded.apache.poi.util.IdentifierManager;
+
 import tp1.Discovery;
 import tp1.api.GoogleSheetsReturn;
 import tp1.api.Spreadsheet;
@@ -34,6 +36,8 @@ import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.server.soap.ws.SpreadsheetsWS;
 import tp1.server.soap.ws.UsersWS;
 import tp1.util.CellRange;
+import tp1.util.DiscoveryURI;
+
 import javax.xml.namespace.QName;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -43,6 +47,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 public class SpreadsheetResourceOAuth implements RestSpreadsheets {
@@ -56,7 +61,6 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     private static final String GOOGLE_SHEETS = "sheets.googleapis.com";
     private static final String HTTPS_GOOGLE_SHEET = "https://sheets.googleapis.com/";
 
-    private int counter = 0;
     //private final Map<String, Spreadsheet> spreadsheets = new HashMap<>();
     private static Logger Log = Logger.getLogger(SpreadsheetResourceOAuth.class.getName());
     private Discovery discovery;
@@ -125,8 +129,8 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
         }
 
         String spreadID = null;
-        int num = counter++;
-        spreadID = String.format("%s-%d", owner, num);
+        String id = UUID.randomUUID().toString();
+        spreadID = String.format("%s_%s", owner, id);
         sheet.setSheetId(spreadID);
         String url = String.format("%s/spreadsheets/%s", serverURI, spreadID);
         sheet.setSheetURL(url);
@@ -142,7 +146,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
          * HashSet<String>(); } aux.add(spreadID); usersSpreadsheets.put(owner, aux);
          * spreadsheets.put(spreadID, sheet);
          */
-        String path = String.format("/%s/%s/%s", domain, owner, num);
+        String path = String.format("/%s/%s/%s", domain, owner, id);
         String jsonSheet = json.toJson(sheet);
         uploadDropbox.execute(path, OVERWRITE, false, false, false, jsonSheet.getBytes());
         synchronized (this) {
@@ -153,7 +157,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
 
     @Override
     public void deleteSpreadsheet(String sheetId, String password) {
-        String[] splitted = sheetId.split("-");
+        String[] splitted = sheetId.split("_");
         String owner = splitted[0];
         String num = splitted[1];
 
@@ -203,7 +207,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
          * sheet.getOwner().equals(userId))) { throw new
          * WebApplicationException(Status.FORBIDDEN); } return sheet;
          */
-        String[] splitted = sheetId.split("-");
+        String[] splitted = sheetId.split("_");
         if (splitted.length != 2)
             throw new WebApplicationException(Status.NOT_FOUND);
         String owner = splitted[0];
@@ -251,7 +255,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             if (!(sheet.getSharedWith().contains(userAux) || sheet.getOwner().equals(userId))) {
             throw new WebApplicationException(Status.FORBIDDEN);
             }*/
-            String[] splitted = sheetId.split("-");
+            String[] splitted = sheetId.split("_");
             String owner = splitted[0];
             String num = splitted[1];
             String path = String.format("/%s/%s/%s", domain, owner, num);
@@ -337,7 +341,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             throw new WebApplicationException(Status.BAD_REQUEST);
         }
         sheet.setCellRawValue(cell, rawValue);*/
-        String[] splitted = sheetId.split("-");
+        String[] splitted = sheetId.split("_");
         String owner = splitted[0];
         String num = splitted[1];
         String path = String.format("/%s/%s/%s", domain, owner, num);
@@ -375,7 +379,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
         }
 
         response = 0;
-        String[] splitted = sheetId.split("-");
+        String[] splitted = sheetId.split("_");
         String owner = splitted[0];
         String num = splitted[1];
         try {
@@ -435,7 +439,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
         }
 
         response = 0;
-        String[] splitted = sheetId.split("-");
+        String[] splitted = sheetId.split("_");
         String owner = splitted[0];
         String num = splitted[1];
         try {
@@ -490,7 +494,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
      *                        request answered with an exception
      */
     private int getUser(String domain, String userId, String password) throws UsersException {
-        URI[] uris = null;
+        DiscoveryURI[] uris = null;
         while ((uris = discovery.knownUrisOf(domain, "users")) == null) {
             try {
                 Thread.sleep(500);
@@ -499,14 +503,14 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             }
         }
 
-        if (uris[0].toString().contains("soap")) {
+        if (uris[0].getURI().contains("soap")) {
             SoapUsers users = null;
             short retries = 0;
             boolean success = false;
             while (!success && retries < MAX_RETRIES) {
                 try {
                     QName QNAME = new QName(SoapUsers.NAMESPACE, SoapUsers.NAME);
-                    Service service = Service.create(new URL(uris[0].toString() + UsersWS.USERS_WSDL), QNAME);
+                    Service service = Service.create(new URL(uris[0].getURI() + UsersWS.USERS_WSDL), QNAME);
                     users = service.getPort(SoapUsers.class);
                     success = true;
                 } catch (WebServiceException e) {
@@ -548,7 +552,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             }
         } else {
 
-            WebTarget target = client.target(uris[0].toString()).path(RestUsers.PATH);
+            WebTarget target = client.target(uris[0].getURI()).path(RestUsers.PATH);
 
             short retries = 0;
 
@@ -581,7 +585,6 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
         
             Instant tw = twSheets.get(sheetId);
             if (tw == null) {
-                System.out.println("importrange3");
                 throw new WebApplicationException(Status.NOT_FOUND);
             }
             if (!timestamp.equals("")) {
@@ -611,12 +614,10 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
             if (!(sheet.getSharedWith().contains(userId) || sheet.getOwner().equals(aux))) {
             throw new WebApplicationException(Status.FORBIDDEN);
             }*/
-            String[] splitted = sheetId.split("-");
+            String[] splitted = sheetId.split("_");
             String owner = splitted[0];
             String num = splitted[1];
             String path = String.format("/%s/%s/%s", domain, owner, num);
-            System.out.println(
-                    "fsdjklhfgsjkghfsdjhgfdsjohbnghsdfigfhjdsoifgdsyioufhsuyiofhgdweqyukfvwedbqufibvwsdyifhasdyiu");
             String sheetJson = download.execute(path);
             if (sheetJson == null)
                 throw new WebApplicationException(Status.NOT_FOUND);
@@ -709,51 +710,35 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
      */
     private String[][] getRangeValuesRequest(String sheetURL, String range, Spreadsheet sheet) throws SheetsException {
 
-        System.out.println("reqrange1");
         Map<String, CacheEntry> mapaux = sheetsValuesCache.get(sheetURL);
         CacheEntry ce = null;
         String tc = "";
         if (mapaux != null) {
             ce = mapaux.get(range);
-            System.out.println("reqrange2");
-
             if (ce != null) {
-                System.out.println("cache1");
                 tc = ce.getTc().toString();
-                System.out.println("cache2");
                 //Duration timeBetween = Duration.between(Instant.now(), ce.getTc());
-                System.out.println("cache3");
                 //if(timeBetween.getSeconds() < VALUES_CACHE_EXPIRATION) {
-
                 if (!Instant.now().isAfter(ce.getTc().plusSeconds(VALUES_CACHE_EXPIRATION))) {
-                    System.out.println("cache4");
                     return ce.getValues();
                 }
             }
         }
         if (sheetURL.contains("rest")) {
 
-            System.out.println("req1");
-            System.out.println(sheetURL);
             WebTarget target = client.target(sheetURL).path("range");
-            System.out.println("req2");
             short retries = 0;
             while (retries < MAX_RETRIES) {
                 try {
                     String userAux = String.format("%s@%s", sheet.getOwner(), domain);
-                    System.out.println("req3");
                     //String sheetId, String range, String userId, String password, String timestamp
                     Response r = target.queryParam("range", range).queryParam("userId", userAux)
                             .queryParam("password", passwordServers).queryParam("timestamp", tc).request()
                             .accept(MediaType.APPLICATION_JSON).get();
-                    System.out.println("req4");
-                    System.out.println(r.toString());
                     Gson json = new Gson();
                     if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
-                        System.out.println("req5");
                         //VAI GSON VAI GSON VAI GSON
                         SPRange val = json.fromJson(r.readEntity(String.class), SPRange.class);
-                        System.out.println("req6");
                         putValuesInCache(sheetURL, range, val);
                         //Log.severe(val.toString());
                         return val.getValues();
@@ -891,6 +876,7 @@ public class SpreadsheetResourceOAuth implements RestSpreadsheets {
     }
 
     protected String[][] getValuesInCache(String sheetURL, String range) {
+        //TODO verificar se a pessoa tem permissoes
         synchronized (this) {
             Map<String, CacheEntry> aux = sheetsValuesCache.get(sheetURL);
             if (aux == null)

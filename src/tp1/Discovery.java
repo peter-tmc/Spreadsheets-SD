@@ -7,9 +7,12 @@ import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.NetworkInterface;
 import java.net.URI;
+import java.time.Instant;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.logging.Logger;
+
+import tp1.util.DiscoveryURI;
 
 /**
  * <p>
@@ -52,7 +55,7 @@ public class Discovery {
 	private InetSocketAddress addr;
 	private String serviceName;
 	private String serviceURI;
-	private Map<String, Set<URI>> urismap = new HashMap<>();
+	private Map<String, SortedSet<DiscoveryURI>> urismap = new HashMap<>();
 	private boolean stopThreads;
 	private String domain;
 
@@ -118,10 +121,14 @@ public class Discovery {
 							// System.out.printf( "FROM %s (%s) : %s\n",
 							// pkt.getAddress().getCanonicalHostName(),
 							// pkt.getAddress().getHostAddress(), msg);
-							Set<URI> elem = urismap.get(msgElems[0]);
+							SortedSet<DiscoveryURI> elem = urismap.get(msgElems[0]);
 							if (elem == null)
-								elem = new HashSet<>();
-							elem.add(URI.create((msgElems[1])));
+								elem = new TreeSet<>();
+							//elem.add(URI.create((msgElems[1])));
+							DiscoveryURI aux = new DiscoveryURI(msgElems[1], Instant.now().toString());
+							if(elem.contains(aux))
+								elem.remove(aux);
+							elem.add(aux);
 							urismap.put(msgElems[0], elem);
 						}
 					} catch (IOException e) {
@@ -129,6 +136,20 @@ public class Discovery {
 					}
 				}
 			}).start();
+			new Thread(() -> {
+				for (SortedSet<DiscoveryURI> set : urismap.values()) {
+					@SuppressWarnings("unchecked")
+					TreeSet<DiscoveryURI> copy = (TreeSet<DiscoveryURI>) ((TreeSet<DiscoveryURI>) set).clone();
+					Iterator<DiscoveryURI> it = copy.iterator();
+					boolean finish = false;
+					while(it.hasNext() && !finish) {
+						DiscoveryURI dUri = it.next();
+						if(Instant.parse(dUri.getTimestamp()).isAfter(Instant.now().minusMillis(DISCOVERY_TIMEOUT)))
+							set.remove(dUri);
+					}
+				}
+			}
+			).start();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -141,25 +162,25 @@ public class Discovery {
 	 * @return an array of URI with the service instances discovered.
 	 * 
 	 */
-	public URI[] knownUrisOf(String domain, String service) {
+	public DiscoveryURI[] knownUrisOf(String domain, String service) {
 		String serviceName2 = String.format("%s:%s", domain, service);
-		Set<URI> set = urismap.get(serviceName2);
+		SortedSet<DiscoveryURI> set = urismap.get(serviceName2);
 		if (set == null)
 			return null;
 		else
-			return set.toArray(new URI[set.size()]);
+			return set.toArray(new DiscoveryURI[set.size()]);
 	}
 
-	public URI[] knownUrisOf(String service) {
-		Set<URI> set = new HashSet<>(urismap.size());
-		for (Entry<String, Set<URI>> entry : urismap.entrySet()) {
+	public DiscoveryURI[] knownUrisOf(String service) {
+		SortedSet<DiscoveryURI> set = new TreeSet<>();
+		for (Entry<String, SortedSet<DiscoveryURI>> entry : urismap.entrySet()) {
 			if (entry.getKey().contains(service)) {
-				for (URI u : entry.getValue()) {
+				for (DiscoveryURI u : entry.getValue()) {
 					set.add(u);
 				}
 			}
 		}
-		return set.toArray(new URI[set.size()]);
+		return set.toArray(new DiscoveryURI[set.size()]);
 	}
 
 	// Main just for testing purposes

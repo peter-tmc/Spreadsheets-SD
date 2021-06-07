@@ -1,10 +1,10 @@
-package tp1.zookeeper.examples;
+package tp1.server.replication.zookeeper.examples;
 
 import java.util.Scanner;
 
 import org.apache.zookeeper.CreateMode;
 
-import tp1.zookeeper.ZookeeperProcessor;
+import tp1.server.replication.zookeeper.ZookeeperProcessor;
 
 public class Writer {
 	// Main just for testing purposes

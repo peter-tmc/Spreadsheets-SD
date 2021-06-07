@@ -48,7 +48,6 @@ public class Download {
                 return r.getBody();
             if(r.getCode() == 429) {
                 try {
-                    System.out.println("download :" + r.getCode());
                     Thread.sleep(RETRY_PERIOD);
                 } catch (InterruptedException e) {
     

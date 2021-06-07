@@ -1,4 +1,4 @@
-package tp1.zookeeper.examples;
+package tp1.server.replication.zookeeper.examples;
 
 import java.util.List;
 import java.util.Scanner;
@@ -6,7 +6,7 @@ import java.util.Scanner;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 
-import tp1.zookeeper.ZookeeperProcessor;
+import tp1.server.replication.zookeeper.ZookeeperProcessor;
 
 public class GetChildren {
 	// Main just for testing purposes
